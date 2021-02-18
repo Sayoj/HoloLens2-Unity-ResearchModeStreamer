@@ -40,7 +40,7 @@ void __stdcall HL2Stream::StartStreaming()
 void HL2Stream::StreamingToggle()
 {
 	m_videoFrameProcessor->StreamingToggle();
-	m_pAHATStreamer->StreamingToggle();
+	m_pAccelStreamer->StreamingToggle();
 }
 
 winrt::Windows::Foundation::IAsyncAction HL2Stream::InitializeVideoFrameProcessorAsync()
@@ -66,6 +66,7 @@ void HL2Stream::InitializeResearchModeSensors()
 	HRESULT hr = S_OK;
 	size_t sensorCount = 0;
 	camConsentGiven = CreateEvent(nullptr, true, false, nullptr);
+	imuConsentGiven = CreateEvent(nullptr, true, false, nullptr);
 
 	// Load research mode library
 	HMODULE hrResearchMode = LoadLibraryA("ResearchModeAPI");
@@ -105,12 +106,12 @@ void HL2Stream::InitializeResearchModeSensors()
 	{
 		wchar_t msgBuffer[200];
 
-		if (sensorDescriptor.sensorType == DEPTH_AHAT)
+		if (sensorDescriptor.sensorType == IMU_ACCEL)
 		{
 			winrt::check_hresult(m_pSensorDevice->GetSensor(
-				sensorDescriptor.sensorType, &m_pAHATSensor));
+				sensorDescriptor.sensorType, &m_pAccelSensor));
 			swprintf_s(msgBuffer, L"Image2Face::InitializeSensors: Sensor %ls\n",
-				m_pAHATSensor->GetFriendlyName());
+				m_pAccelSensor->GetFriendlyName());
 			OutputDebugStringW(msgBuffer);
 		}
 	}
@@ -125,15 +126,14 @@ void HL2Stream::InitializeResearchModeProcessing()
 	GUID guid;
 	GetRigNodeId(guid);
 
-	auto ahatStreamer = std::make_shared<Streamer>(L"23941", guid, m_worldOrigin);
-	m_pAHATStreamer = ahatStreamer;
+	auto accelStreamer = std::make_shared<Streamer>(L"23940", guid, m_worldOrigin);
+	m_pAccelStreamer = accelStreamer;
 
-	if (m_pAHATSensor)
+	if (m_pAccelSensor)
 	{
-		auto processor = std::make_shared<ResearchModeFrameProcessor>(
-			m_pAHATSensor, camConsentGiven, &camAccessCheck, 0, m_pAHATStreamer);
+		auto processor = std::make_shared<ResearchModeFrameProcessor>(m_pAccelSensor, imuConsentGiven, &imuAccessCheck,0, m_pAccelStreamer);
 
-		m_pAHATProcessor = processor;
+		m_pAccelProcessor = processor;
 	}
 }
 
@@ -154,9 +154,9 @@ void HL2Stream::DisableSensors()
 #if DBG_ENABLE_VERBOSE_LOGGING
 	OutputDebugString(L"Image2Face::DisableSensors: Disabling sensors...\n");
 #endif // DBG_ENABLE_VERBOSE_LOGGING
-	if (m_pAHATSensor)
+	if (m_pAccelSensor)
 	{
-		m_pAHATSensor->Release();
+		m_pAccelSensor->Release();
 	}
 	if (m_pSensorDevice)
 	{

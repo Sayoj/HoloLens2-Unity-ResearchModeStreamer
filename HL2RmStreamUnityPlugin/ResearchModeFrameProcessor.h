@@ -4,8 +4,8 @@ class ResearchModeFrameProcessor
 public:
 	ResearchModeFrameProcessor(
 		IResearchModeSensor* pLLSensor,
-		HANDLE camConsentGiven,
-		ResearchModeSensorConsent* camAccessConsent,
+		HANDLE imuConsentGiven,
+		ResearchModeSensorConsent* imuAccessConsent,
 		const long long minDelta,
 		std::shared_ptr<IResearchModeFrameSink> frameSink);
 
@@ -14,9 +14,9 @@ public:
 protected:
 	// Thread for retrieving frames
 	static void CameraUpdateThread(
-		ResearchModeFrameProcessor* pVLCprocessor,
-		HANDLE camConsentGiven,
-		ResearchModeSensorConsent* camAccessConsent);
+		ResearchModeFrameProcessor* pResearchModeFrameProcessor,
+		HANDLE imuConsentGiven,
+		ResearchModeSensorConsent* imuAccessConsent);
 
 	static void FrameProcesingThread(
 		ResearchModeFrameProcessor* pProcessor);

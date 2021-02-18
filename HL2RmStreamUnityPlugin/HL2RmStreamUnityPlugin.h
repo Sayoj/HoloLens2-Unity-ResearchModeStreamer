@@ -26,23 +26,25 @@ namespace HL2Stream
 	static void CamAccessOnComplete(ResearchModeSensorConsent consent);
 	static void ImuAccessOnComplete(ResearchModeSensorConsent consent);
 
+
 	winrt::Windows::Perception::Spatial::SpatialCoordinateSystem
 		m_worldOrigin{ nullptr };
 	std::wstring m_patient;
 
 	IResearchModeSensorDevice* m_pSensorDevice;
 	IResearchModeSensorDeviceConsent* m_pSensorDeviceConsent;
+
 	std::vector<ResearchModeSensorDescriptor> m_sensorDescriptors;
 
 	std::unique_ptr<VideoCameraStreamer> m_videoFrameProcessor = nullptr;
 	winrt::Windows::Foundation::IAsyncAction m_videoFrameProcessorOperation = nullptr;
 
 	// sensor
-	IResearchModeSensor* m_pAHATSensor = nullptr;
+	IResearchModeSensor* m_pAccelSensor = nullptr;
 
 	// camera streamers
-	std::shared_ptr<Streamer> m_pAHATStreamer;
+	std::shared_ptr<Streamer> m_pAccelStreamer;
 	
 	// sensor processors
-	std::shared_ptr<ResearchModeFrameProcessor> m_pAHATProcessor;
+	std::shared_ptr<ResearchModeFrameProcessor> m_pAccelProcessor;
 }

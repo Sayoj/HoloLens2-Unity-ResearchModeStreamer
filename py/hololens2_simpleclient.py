@@ -13,6 +13,18 @@ np.warnings.filterwarnings('ignore')
 # Definitions
 # Protocol Header Format
 # see https://docs.python.org/2/library/struct.html#format-characters
+
+IMU_STREAM_HEADER_FORMAT = "@qIIII14f"
+
+IMU_FRAME_STREAM_HEADER = namedtuple(
+    'SensorFrameStreamHeader',
+    'Timestamp printStringAsWString'
+    'IMUtoWorldtransformM11 IMUtoWorldtransformM12 IMUtoWorldtransformM13 IMUtoWorldtransformM14'
+    'IMUtoWorldtransformM21 IMUtoWorldtransformM22 IMUtoWorldtransformM23 IMUtoWorldtransformM24'
+    'IMUtoWorldtransformM31 IMUtoWorldtransformM32 IMUtoWorldtransformM33 IMUtoWorldtransformM34'
+    'IMUtoWorldtransformM41 IMUtoWorldtransformM42 IMUtoWorldtransformM43 IMUtoWorldtransformM44'
+)
+
 VIDEO_STREAM_HEADER_FORMAT = "@qIIII18f"
 
 VIDEO_FRAME_STREAM_HEADER = namedtuple(
@@ -36,10 +48,11 @@ RM_FRAME_STREAM_HEADER = namedtuple(
 )
 
 # Each port corresponds to a single stream type
-VIDEO_STREAM_PORT = 23940
-AHAT_STREAM_PORT = 23941
+# VIDEO_STREAM_PORT = 23940
+# AHAT_STREAM_PORT = 23941
+IMU_STREAM_PORT = 23940
 
-HOST = '192.168.0.80'
+HOST = '192.168.2.112'
 
 HundredsOfNsToMilliseconds = 1e-4
 MillisecondsToSeconds = 1e-3
@@ -109,38 +122,47 @@ class FrameReceiverThread(threading.Thread):
     def get_mat_from_header(self, header):
         return
 
-
-class VideoReceiverThread(FrameReceiverThread):
+class IMUReceiverThread(FrameReceiverThread):
     def __init__(self, host):
-        super().__init__(host, VIDEO_STREAM_PORT, VIDEO_STREAM_HEADER_FORMAT,
-                         VIDEO_FRAME_STREAM_HEADER)
+        super().__init__(host, IMU_STREAM_PORT, IMU_STREAM_HEADER_FORMAT,
+                         IMU_FRAME_STREAM_HEADER)
 
     def listen(self):
         while True:
             self.latest_header, image_data = self.get_data_from_socket()
-            self.latest_frame = np.frombuffer(image_data, dtype=np.uint8).reshape((self.latest_header.ImageHeight,
-                                                                                   self.latest_header.ImageWidth,
-                                                                                   self.latest_header.PixelStride))
+            self.latest_frame = np.frombuffer(image_data, dtype=np.uint8).reshape((self.latest_header.printStringAsWString))
 
-    def get_mat_from_header(self, header):
-        pv_to_world_transform = np.array(header[7:24]).reshape((4, 4)).T
-        return pv_to_world_transform
+# class VideoReceiverThread(FrameReceiverThread):
+#    def __init__(self, host):
+#         super().__init__(host, VIDEO_STREAM_PORT, VIDEO_STREAM_HEADER_FORMAT,
+#                          VIDEO_FRAME_STREAM_HEADER)
+
+#    def listen(self):
+#        while True:
+#            self.latest_header, image_data = self.get_data_from_socket()
+#            self.latest_frame = np.frombuffer(image_data, dtype=np.uint8).reshape((self.latest_header.ImageHeight,
+#                                                                                  self.latest_header.ImageWidth,
+#                                                                                   self.latest_header.PixelStride))
+
+#    def get_mat_from_header(self, header):
+#        pv_to_world_transform = np.array(header[7:24]).reshape((4, 4)).T
+#        return pv_to_world_transform
 
 
-class AhatReceiverThread(FrameReceiverThread):
-    def __init__(self, host):
-        super().__init__(host,
-                         AHAT_STREAM_PORT, RM_STREAM_HEADER_FORMAT, RM_FRAME_STREAM_HEADER)
+# class AhatReceiverThread(FrameReceiverThread):
+#    def __init__(self, host):
+#        super().__init__(host,
+#                         AHAT_STREAM_PORT, RM_STREAM_HEADER_FORMAT, RM_FRAME_STREAM_HEADER)
 
-    def listen(self):
-        while True:
-            self.latest_header, image_data = self.get_data_from_socket()
-            self.latest_frame = np.frombuffer(image_data, dtype=np.uint16).reshape((self.latest_header.ImageHeight,
-                                                                                    self.latest_header.ImageWidth))
+#    def listen(self):
+#        while True:
+#            self.latest_header, image_data = self.get_data_from_socket()
+#            self.latest_frame = np.frombuffer(image_data, dtype=np.uint16).reshape((self.latest_header.ImageHeight,
+#                                                                                    self.latest_header.ImageWidth))
 
-    def get_mat_from_header(self, header):
-        rig_to_world_transform = np.array(header[5:22]).reshape((4, 4)).T
-        return rig_to_world_transform
+#    def get_mat_from_header(self, header):
+#        rig_to_world_transform = np.array(header[5:22]).reshape((4, 4)).T
+#        return rig_to_world_transform
 
 
 if __name__ == '__main__':

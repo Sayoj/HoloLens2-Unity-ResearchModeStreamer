@@ -1,4 +1,7 @@
 #include "pch.h"
+#include <locale>
+#include <codecvt>
+#include <string>
 
 #define DBG_ENABLE_INFO_LOGGING 1
 #define DBG_ENABLE_ERROR_LOGGING 1
@@ -77,8 +80,9 @@ void Streamer::OnConnectionReceived(
 }
 
 void Streamer::Send(
-    IResearchModeSensorFrame* frame,
+    IResearchModeSensorFrame* pSensorFrame,
     ResearchModeSensorType pSensorType)
+
 {
 #if DBG_ENABLE_INFO_LOGGING
     OutputDebugStringW(L"Streamer::Send: Received frame for sending!\n");
@@ -101,7 +105,7 @@ void Streamer::Send(
 
     // grab the frame info
     ResearchModeSensorTimestamp rmTimestamp;
-    winrt::check_hresult(frame->GetTimeStamp(&rmTimestamp));
+    winrt::check_hresult(pSensorFrame->GetTimeStamp(&rmTimestamp));
     auto prevTimestamp = rmTimestamp.HostTicks;
 
     auto timestamp = PerceptionTimestampHelper::FromSystemRelativeTargetTime(HundredsOfNanoseconds(checkAndConvertUnsigned(prevTimestamp)));
@@ -118,108 +122,104 @@ void Streamer::Send(
 
     // grab the frame data
     ResearchModeSensorResolution resolution;
-    IResearchModeSensorDepthFrame* pDepthFrame = nullptr;
+    IResearchModeAccelFrame* pSensorAccelFrame = nullptr;
     size_t outBufferCount;
-    const UINT16* pDepth = nullptr;
 
     // invalidation value for AHAT 
     USHORT maxValue = 4090;
 
-    frame->GetResolution(&resolution);
-    HRESULT hr = frame->QueryInterface(IID_PPV_ARGS(&pDepthFrame));
+    pSensorFrame->GetResolution(&resolution);
 
-    if (!pDepthFrame)
+    HRESULT hr = pSensorFrame->QueryInterface(IID_PPV_ARGS(&pSensorAccelFrame));
+    if (!pSensorAccelFrame)
     {
 #if DBG_ENABLE_VERBOSE_LOGGING
-        OutputDebugStringW(L"Streamer::SendFrame: Failed to grab depth frame.\n");
-#endif
-        return;
-    }
-    int imageWidth = resolution.Width;
-    int imageHeight = resolution.Height;
-    int pixelStride = resolution.BytesPerPixel;
-
-    int rowStride = imageWidth * pixelStride;
-
-    hr = pDepthFrame->GetBuffer(&pDepth, &outBufferCount);
-    std::vector<BYTE> depthByteData;
-    depthByteData.reserve(outBufferCount * sizeof(UINT16));
-
-    //std::vector<uint16_t> depthBufferAsVector;
-    // validate depth & append to vector
-    for (size_t i = 0; i < outBufferCount; ++i)
-    {
-        // use a different invalidation condition for Long Throw and AHAT 
-        const bool invalid = (pDepth[i] >= maxValue);
-        UINT16 d;
-        if (invalid)
-        {
-            d = 0;
-        }
-        else
-        {
-            d = pDepth[i];
-        }
-        depthByteData.push_back((BYTE)(d >> 8));
-        depthByteData.push_back((BYTE)d);
-    }
-
-    if (m_writeInProgress)
-    {
-#if DBG_ENABLE_VERBOSE_LOGGING
-        OutputDebugStringW(L"Streamer::SendFrame: Write already in progress.\n");
+        OutputDebugStringW(L"Streamer::SendFrame: Failed to grab Accel Sensor frame.\n");
 #endif
         return;
     }
 
-    m_writeInProgress = true;
-
-    try
+    if (pSensorAccelFrame)
     {
-        // Write header
-        m_writer.WriteUInt64(absoluteTimestamp);
-        m_writer.WriteInt32(imageWidth);
-        m_writer.WriteInt32(imageHeight);
-        m_writer.WriteInt32(pixelStride);
-        m_writer.WriteInt32(rowStride);
+        DirectX::XMFLOAT3 sample;
+        char printString[1000];
+        HRESULT hr = S_OK;
 
-        WriteMatrix4x4(rig2worldTransform);
+        ResearchModeSensorTimestamp timeStamp;
+        UINT64 lastSocTickDelta = 0;
+        UINT64 glastSocTick = 1;
 
-        m_writer.WriteBytes(depthByteData);
+        pSensorFrame->GetTimeStamp(&timeStamp);
+
+        if (glastSocTick != 0)
+        {
+            lastSocTickDelta = timeStamp.HostTicks - glastSocTick;
+        }
+        glastSocTick = timeStamp.HostTicks;
+
+        hr = pSensorAccelFrame->GetCalibratedAccelaration(&sample);
+        if (FAILED(hr))
+        {
+            return;
+        }
+        sprintf_s(printString, "####Accel: % 3.4f % 3.4f % 3.4f %f %I64d %I64d\n",
+            sample.x,
+            sample.y,
+            sample.z,
+            sqrt(sample.x * sample.x + sample.y * sample.y + sample.z * sample.z),
+            (lastSocTickDelta * 1000) / timeStamp.HostTicksPerSecond
+        );
+
+        wchar_t* printStringAsWString = nullptr;
+
+        int convertResult = MultiByteToWideChar(CP_UTF8, 0, printString, -1, printStringAsWString, 0);
+
+        if (m_writeInProgress)
+        {
+#if DBG_ENABLE_VERBOSE_LOGGING
+            OutputDebugStringW(L"Streamer::SendFrame: Write already in progress.\n");
+#endif
+            return;
+        }
+
+        m_writeInProgress = true;
+
+
+        try
+        {
+            // Write header
+            m_writer.WriteUInt64(absoluteTimestamp);
+            m_writer.WriteString(printStringAsWString);
+
+            WriteMatrix4x4(rig2worldTransform);
 
 #if DBG_ENABLE_VERBOSE_LOGGING
-        OutputDebugStringW(L"Streamer::SendFrame: Trying to store writer...\n");
+            OutputDebugStringW(L"Streamer::SendFrame: Trying to store writer...\n");
 #endif
-        m_writer.StoreAsync();
-    }
-    catch (winrt::hresult_error const& ex)
-    {
-        SocketErrorStatus webErrorStatus{ SocketError::GetStatus(ex.to_abi()) };
-        if (webErrorStatus == SocketErrorStatus::ConnectionResetByPeer)
-        {
-            // the client disconnected!
-            m_writer == nullptr;
-            m_streamSocket == nullptr;
-            m_writeInProgress = false;
+            m_writer.StoreAsync();
         }
+        catch (winrt::hresult_error const& ex)
+        {
+            SocketErrorStatus webErrorStatus{ SocketError::GetStatus(ex.to_abi()) };
+            if (webErrorStatus == SocketErrorStatus::ConnectionResetByPeer)
+            {
+                // the client disconnected!
+                m_writer == nullptr;
+                m_streamSocket == nullptr;
+                m_writeInProgress = false;
+            }
 #if DBG_ENABLE_ERROR_LOGGING
-        winrt::hstring message = ex.message();
-        OutputDebugStringW(L"Streamer::SendFrame: Sending failed with ");
-        OutputDebugStringW(message.c_str());
-        OutputDebugStringW(L"\n");
+            winrt::hstring message = ex.message();
+            OutputDebugStringW(L"Streamer::SendFrame: Sending failed with ");
+            OutputDebugStringW(message.c_str());
+            OutputDebugStringW(L"\n");
 #endif // DBG_ENABLE_ERROR_LOGGING
-    }
-
-    m_writeInProgress = false;
-
-    if (pDepthFrame)
-    {
-        pDepthFrame->Release();
-    }
+        }
 
 #if DBG_ENABLE_VERBOSE_LOGGING
-    OutputDebugStringW(L"Streamer::SendFrame: Frame sent!\n");
+        OutputDebugStringW(L"Streamer::SendFrame: Frame sent!\n");
 #endif
+    }
 }
 
 void Streamer::StreamingToggle()

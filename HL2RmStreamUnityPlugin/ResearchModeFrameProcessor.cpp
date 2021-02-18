@@ -8,10 +8,10 @@
 using namespace winrt::Windows::Perception::Spatial;
 
 ResearchModeFrameProcessor::ResearchModeFrameProcessor(
-    IResearchModeSensor* pLLSensor,
-    HANDLE camConsentGiven,
-    ResearchModeSensorConsent* camAccessConsent,
-    const long long minDelta,
+    IResearchModeSensor* pLLSensor, 
+    HANDLE imuConsentGiven, 
+    ResearchModeSensorConsent* imuAccessConsent, 
+    const long long minDelta, 
     std::shared_ptr<IResearchModeFrameSink> frameSink)
 {
 #if DBG_ENABLE_INFO_LOGGING
@@ -29,7 +29,7 @@ ResearchModeFrameProcessor::ResearchModeFrameProcessor(
 
     // the camera update thread
     m_pCameraUpdateThread = new std::thread(
-        CameraUpdateThread, this, camConsentGiven, camAccessConsent);
+        CameraUpdateThread, this, imuConsentGiven, imuAccessConsent);
 
     m_pProcessThread = new std::thread(FrameProcesingThread, this);
 }
@@ -49,16 +49,16 @@ ResearchModeFrameProcessor::~ResearchModeFrameProcessor()
 
 void ResearchModeFrameProcessor::CameraUpdateThread(
     ResearchModeFrameProcessor* pResearchModeFrameProcessor,
-    HANDLE camConsentGiven,
-    ResearchModeSensorConsent* camAccessConsent)
+    HANDLE imuConsentGiven,
+    ResearchModeSensorConsent* imuAccessConsent)
 {
     HRESULT hr = S_OK;
 
     // wait for the event to be set and check for the consent provided by the user.
-    DWORD waitResult = WaitForSingleObject(camConsentGiven, INFINITE);
+    DWORD waitResult = WaitForSingleObject(imuConsentGiven, INFINITE);
     if (waitResult == WAIT_OBJECT_0)
     {
-        switch (*camAccessConsent)
+        switch (*imuAccessConsent)
         {
         case ResearchModeSensorConsent::Allowed:
             OutputDebugStringW(L"ResearchModeFrameProcessor::CameraUpdateThread: Access is granted. \n");
